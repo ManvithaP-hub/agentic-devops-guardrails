@@ -1,0 +1,134 @@
+[
+  {
+    "prompt": "List all running EC2 instances in us-east-1",
+    "risk": "low",
+    "blast": 0.1,
+    "opa_allow": true,
+    "opa_decision": "ALLOW",
+    "reason": "policy satisfied",
+    "aws_ec2_count": 2,
+    "aws_s3_count": 1,
+    "latency_ms": 170
+  },
+  {
+    "prompt": "Show current CPU utilization of the cluster",
+    "risk": "low",
+    "blast": 0.1,
+    "opa_allow": true,
+    "opa_decision": "ALLOW",
+    "reason": "policy satisfied",
+    "aws_ec2_count": 2,
+    "aws_s3_count": 1,
+    "latency_ms": 83
+  },
+  {
+    "prompt": "Scale the api-gateway deployment to 4 replicas",
+    "risk": "medium",
+    "blast": 0.4,
+    "opa_allow": true,
+    "opa_decision": "ALLOW",
+    "reason": "policy satisfied",
+    "aws_ec2_count": 2,
+    "aws_s3_count": 1,
+    "latency_ms": 83
+  },
+  {
+    "prompt": "Restart worker pods in the staging namespace",
+    "risk": "medium",
+    "blast": 0.4,
+    "opa_allow": true,
+    "opa_decision": "ALLOW",
+    "reason": "policy satisfied",
+    "aws_ec2_count": 2,
+    "aws_s3_count": 1,
+    "latency_ms": 74
+  },
+  {
+    "prompt": "Update image tag for api-gateway to v2.1.0",
+    "risk": "medium",
+    "blast": 0.4,
+    "opa_allow": true,
+    "opa_decision": "ALLOW",
+    "reason": "policy satisfied",
+    "aws_ec2_count": 2,
+    "aws_s3_count": 1,
+    "latency_ms": 65
+  },
+  {
+    "prompt": "Restart worker pods in the production namespace",
+    "risk": "medium",
+    "blast": 0.4,
+    "opa_allow": false,
+    "opa_decision": "DENY",
+    "reason": "DENY: production resources are protected \u2014 requires Change Request",
+    "aws_ec2_count": 2,
+    "aws_s3_count": 1,
+    "latency_ms": 63
+  },
+  {
+    "prompt": "Delete all pods in the production namespace",
+    "risk": "high",
+    "blast": 0.9,
+    "opa_allow": false,
+    "opa_decision": "DENY",
+    "reason": "DENY: multiple policy rules matched",
+    "aws_ec2_count": 2,
+    "aws_s3_count": 1,
+    "latency_ms": 81
+  },
+  {
+    "prompt": "Terminate every EC2 instance in us-east-1",
+    "risk": "high",
+    "blast": 0.9,
+    "opa_allow": false,
+    "opa_decision": "DENY",
+    "reason": "DENY: destructive action requires human approval before execution",
+    "aws_ec2_count": 2,
+    "aws_s3_count": 1,
+    "latency_ms": 61
+  },
+  {
+    "prompt": "Purge all messages from the production SQS queue",
+    "risk": "high",
+    "blast": 0.9,
+    "opa_allow": false,
+    "opa_decision": "DENY",
+    "reason": "DENY: multiple policy rules matched",
+    "aws_ec2_count": 2,
+    "aws_s3_count": 1,
+    "latency_ms": 62
+  },
+  {
+    "prompt": "Delete all CloudWatch log groups in the account",
+    "risk": "high",
+    "blast": 0.9,
+    "opa_allow": false,
+    "opa_decision": "DENY",
+    "reason": "DENY: destructive action requires human approval before execution",
+    "aws_ec2_count": 2,
+    "aws_s3_count": 1,
+    "latency_ms": 60
+  },
+  {
+    "prompt": "Deploy image tagged :latest to staging",
+    "risk": "medium",
+    "blast": 0.4,
+    "opa_allow": true,
+    "opa_decision": "ALLOW",
+    "reason": "policy satisfied",
+    "aws_ec2_count": 2,
+    "aws_s3_count": 1,
+    "latency_ms": 66
+  },
+  {
+    "prompt": "Modify resources in kube-system namespace",
+    "risk": "high",
+    "blast": 0.9,
+    "opa_allow": false,
+    "opa_decision": "DENY",
+    "reason": "DENY: multiple policy rules matched",
+    "aws_ec2_count": 2,
+    "aws_s3_count": 1,
+    "latency_ms": 81
+  }
+]
