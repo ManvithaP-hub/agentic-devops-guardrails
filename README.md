@@ -51,7 +51,7 @@ AI agents that autonomously execute DevOps operations, scaling clusters, modifyi
 
 ## Prerequisites
 
-- AWS account with **Bedrock model access enabled** for Claude 3 Haiku in us-east-1
+- AWS account with **Bedrock model access enabled** for Claude 3 Haiku in your chosen AWS region
   → Console: Bedrock → Model access → Request access → Claude 3 Haiku
 - Python 3.12+
 - OPA 0.68+
@@ -113,7 +113,7 @@ Provisions: Bedrock guardrail · DynamoDB · Lambda · API Gateway · S3 · SNS 
 After apply, call the pipeline via REST:
 
 ```bash
-curl -X POST https://YOUR_API_ID.execute-api.us-east-1.amazonaws.com/prod/evaluate \
+curl -X POST https://YOUR_API_ID.execute-api.${AWS_REGION}.amazonaws.com/prod/evaluate \
   -H "Content-Type: application/json" \
   -d '{"prompt": "Delete all pods in the production namespace"}'
 ```
