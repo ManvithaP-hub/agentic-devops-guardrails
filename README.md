@@ -1,6 +1,5 @@
 # agentic-devops-guardrails
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 A five-layer guardrail architecture for governing agentic AI actions on cloud-native DevOps infrastructure.
 
@@ -8,6 +7,7 @@ A five-layer guardrail architecture for governing agentic AI actions on cloud-na
 [![OPA](https://img.shields.io/badge/Policy-Open%20Policy%20Agent-blue)](https://www.openpolicyagent.org)
 [![Python](https://img.shields.io/badge/Python-3.12-blue)](https://python.org)
 [![Terraform](https://img.shields.io/badge/IaC-Terraform-purple)](https://terraform.io)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 
 
