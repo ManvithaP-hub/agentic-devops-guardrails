@@ -1,5 +1,7 @@
 # agentic-devops-guardrails
 
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 A five-layer guardrail architecture for governing agentic AI actions on cloud-native DevOps infrastructure.
 
 [![AWS](https://img.shields.io/badge/AWS-Bedrock%20%7C%20Lambda%20%7C%20DynamoDB-orange)](https://aws.amazon.com)
