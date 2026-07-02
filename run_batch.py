@@ -7,7 +7,7 @@ runtime  = boto3.client("bedrock-runtime", region_name=_REGION)
 
 ACCOUNT  = boto3.client("sts").get_caller_identity()["Account"]
 BUCKET   = f"devops-agent-snapshots-{ACCOUNT}"
-MODEL_ID = "anthropic.claude-3-haiku-20240307-v1:0"
+MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
 # Create S3 bucket for batch if not exists
 try:
