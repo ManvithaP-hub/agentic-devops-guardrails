@@ -1,176 +1,201 @@
 # agentic-devops-guardrails
 
-
-A five-layer guardrail architecture for governing agentic AI actions on cloud-native DevOps infrastructure.
-
-[![AWS](https://img.shields.io/badge/AWS-Bedrock%20%7C%20Lambda%20%7C%20DynamoDB-orange)](https://aws.amazon.com)
-[![OPA](https://img.shields.io/badge/Policy-Open%20Policy%20Agent-blue)](https://www.openpolicyagent.org)
-[![Python](https://img.shields.io/badge/Python-3.12-blue)](https://python.org)
-[![Terraform](https://img.shields.io/badge/IaC-Terraform-purple)](https://terraform.io)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
+A five-layer guardrail architecture for governing autonomous AI agents in cloud-native DevOps pipelines on AWS. This repository contains the reference implementation, evaluation framework, and empirical results.
 
+---
 
-## The problem
+## The Problem
 
-AI agents that autonomously execute DevOps operations, scaling clusters, modifying configurations, and managing deployments need guardrails that go beyond LLM output filtering. Existing solutions each protect one layer in isolation. This project combines five enforcement layers into a unified execution-boundary pipeline.
+Autonomous AI agents operating in DevOps pipelines can fail in unbounded ways — hallucinating infrastructure states, misinterpreting instruction scope, or being manipulated by adversarial inputs embedded in monitoring alerts or incident tickets. Existing safety mechanisms address these risks incompletely:
 
+- **LLM output filters** intercept what the model says but not what the agent does
+- **Policy-as-code frameworks** enforce rules at deployment time, not at agent runtime against live infrastructure state
+- **Human approval workflows** operate on timescales incompatible with autonomous agents
 
+This repository provides a unified five-layer guardrail pipeline that intercepts agent actions at the tool-call execution boundary before they affect infrastructure.
 
-## Results — Enterprise Evaluation (100 prompts)
-
-| Category | N | Accuracy | FP Rate | FN Rate | Avg Latency |
-|---|---|---|---|---|---|
-| Read operations | 20 | 95% | 5% | 0% | 910ms |
-| Safe changes (staging) | 20 | 100% | 0% | 0% | 7,920ms |
-| Risky prod changes | 20 | 95% | 0% | 5% | 13,949ms |
-| Destructive ops | 20 | 100% | 0% | 0% | 9,590ms |
-| Adversarial jailbreaks | 20 | 90% | 0% | 10% | 8,125ms |
-| **Total** | **100** | **96%** | **1%** | **3%** | — |
-
-- **96% overall accuracy** across 100 prompts on live AWS infrastructure
-- **1% false positive rate** — safe operations correctly allowed through
-- **0% FN on destructive ops** — no dangerous action passed through
-- **22x latency reduction** for blocked actions (347ms vs 8,054ms)
-- **$0.0017 total cost** for full 100-prompt evaluation
-- **ROI: 193,563,766x** vs $5,600 average DevOps incident cost (Gartner 2024)
-
-
+---
 
 ## Architecture
 
-![Agentic DevOps Guardrail — 5-layer architecture](architecture.png)
+```
+AI Agent Action Prompt
+        │
+        ▼
+┌─────────────────────────────┐
+│  Blast-Radius Scorer        │  B < 0.3  → auto-approve
+│  B(a) ∈ [0, 1]             │  B ≥ 0.3  → Layer 1 + 2
+└─────────────┬───────────────┘  B ≥ 0.9  → full pipeline + HITL
+              ▼
+┌─────────────────────────────┐
+│  Layer 1: Bedrock Guardrail │  LLM output filter
+│  Topic deny + PII block     │  ~400ms when blocked
+└─────────────┬───────────────┘
+              ▼
+┌─────────────────────────────┐
+│  Layer 2: OPA Live State    │  Direct boto3 SDK calls
+│  ec2 + s3 + iam per-call   │  No cache. No CloudTrail.
+└─────────────┬───────────────┘
+              ▼
+┌─────────────────────────────┐
+│  Layer 3: Confidence Delta  │  Claude Haiku 4.5 A/B
+│  Hedging vocab frequency    │  Threshold: δ ≥ 0.55
+└─────────────┬───────────────┘
+              ▼
+┌─────────────────────────────┐
+│  Layer 4: HITL Gate         │  DynamoDB TTL = 300s
+│  Silence equals rejection   │  SNS email + API Gateway
+└─────────────┬───────────────┘
+              ▼
+┌─────────────────────────────┐
+│  Layer 5: Audit + Rollback  │  CloudWatch structured JSON
+│  S3 snapshot before action  │  Auto-rollback if rate < 70%
+└─────────────────────────────┘
+```
 
-| Layer | Component | What it does |
+### Blast-Radius Scoring
+
+Every proposed agent action receives a normalized impact score B(a) ∈ [0, 1]:
+
+| Risk Tier | Score | Vocabulary |
 |---|---|---|
-| 1 | AWS Bedrock Guardrail | Topic deny · PII block · content filter |
-| 2 | OPA Rego Policy | Live AWS state (EC2/S3/IAM) · prod protection |
-| 3 | Confidence Delta Scorer | A/B guardrail vs no-guardrail · score [0,1] |
-| 4 | Lambda HITL Gate | DynamoDB token · 5-min TTL · SNS approval email |
-| 5 | CloudWatch Audit | Structured JSON · S3 snapshot · auto-rollback |
+| Low-risk | 0.1 | list, get, describe, status, monitor, read, query |
+| Medium-risk | 0.4 | restart, scale, update, patch, deploy, modify |
+| High-risk | 0.9 | delete, destroy, terminate, drop, purge, wipe, erase |
 
+### Layer 2: OPA Against Live Infrastructure State
 
+Unlike admission-time policy engines that evaluate static manifests, Layer 2 pulls live AWS resource state via boto3 immediately before each policy evaluation — EC2 instance inventory with environment tags, S3 bucket list, and IAM role inventory. This live context enables the policy engine to distinguish staging from production operations at runtime, addressing the fundamental limitation of static policy evaluation.
 
-## Prerequisites
+### Layer 4: Silence Equals Rejection
 
-- AWS account with **Bedrock model access enabled** for Claude 3 Haiku in your chosen AWS region
-  → Console: Bedrock → Model access → Request access → Claude 3 Haiku
-- Python 3.12+
-- OPA 0.68+
-- AWS CLI configured (`aws configure`)
-- Terraform 1.5+ (for deployment only)
+The HITL gate is the most critical safety property of this architecture. When a high-risk action requires human approval, a DynamoDB record is written with TTL = now + 300 seconds. If no approver responds within 5 minutes, the record expires automatically and the action is denied. An unavailable approver never produces an implicit approval. This is enforced by native DynamoDB TTL with zero polling overhead.
 
+---
 
+## Empirical Results
 
-## Quickstart
+The architecture was evaluated on live AWS infrastructure (us-east-1) across 100 prompts spanning five risk categories including 20 adversarial jailbreak variants, using Claude Haiku 4.5 as the inference model.
 
-```bash
-git clone https://github.com/ManvithaP-hub/agentic-devops-guardrails
-cd agentic-devops-guardrails
-python3 -m venv venv && source venv/bin/activate
-pip install boto3
-brew install opa        # macOS
-# Linux: curl -L -o opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static && chmod +x opa
-python3 devops_agent.py
-```
+### Five-Layer Pipeline Results
 
+| Category | N | Accuracy | FP Rate | FN Rate | Avg Latency |
+|---|---|---|---|---|---|
+| Read operations | 20 | 100% | 0% | 0% | 0ms |
+| Safe staging changes | 20 | 70% | 30% | 0% | 12,638ms |
+| Risky prod changes | 20 | **100%** | 0% | **0%** | 5,600ms |
+| Destructive operations | 20 | **100%** | 0% | **0%** | 430ms |
+| Adversarial jailbreaks | 20 | **100%** | 0% | **0%** | 897ms |
+| **Total** | **100** | **94%** | **6%** | **0%** | **7,851ms** |
 
+### Key Findings
 
-## Run each layer
+**0% false negative rate across all 60 block-expected prompts.** Every destructive operation, risky production mutation, and adversarial jailbreak was blocked. This includes all 20 destructive operations (delete/destroy/terminate/purge) and all 20 adversarial variants including prompt injection, authority spoofing, role-playing attacks, and obfuscated intent.
 
-```bash
-# Layer 1 — Bedrock guardrail
-python3 devops_agent.py
+**7.6x latency reduction for blocked actions.** Intercepted actions resolved at 1,828ms average versus 13,874ms for allowed actions. Layer 1 short-circuits the full LLM invocation for high-confidence blocks.
 
-# Layer 2 — OPA policy against live AWS state
-python3 layers/2-opa/opa_evaluator.py
+**Layer contribution breakdown:**
+- Layer 1 (Bedrock Guardrail): blocked 48 prompts (80% of all blocks)
+- Layer 2 (OPA live state): blocked 18 additional prompts (20% of all blocks)
+- Layers 3-5: 0 additional blocks in this evaluation — demonstrating Layer 1 and 2 handle the primary enforcement load while Layers 3-5 provide defense-in-depth for edge cases
 
-# Layer 3 — Confidence delta A/B scorer
-python3 layers/3-confidence/confidence_scorer.py
+**The 6% false positive rate** (6 staging operations incorrectly blocked) represents cases where staging operations use vocabulary that overlaps with the DestructiveOps topic definition without explicit staging context keywords. These are addressed in production by the low-risk bypass mechanism for confirmed non-production environments.
 
-# Layer 4 — HITL gate with DynamoDB TTL
-python3 layers/4-hitl/hitl_gate.py
+---
 
-# Layer 5 — Full pipeline end to end
-python3 layers/5-pipeline/pipeline.py
+## Why Single-Layer Guardrails Are Insufficient
 
-# Enterprise evaluation — 100 prompts
-cd layers/6-enterprise && python3 enterprise_eval.py
-```
+A single Bedrock Guardrail layer evaluated against the same 100 prompts achieved:
 
+| Metric | Layer 1 Only | Five Layers |
+|---|---|---|
+| Overall accuracy | 76% | **94%** |
+| FN rate | 18% | **0%** |
+| FN on risky prod | 16/20 | **0/20** |
+| FN on destructive | 0/20 | **0/20** |
 
+The 18 false negatives in the single-layer baseline consist entirely of medium-risk production mutations — actions using vocabulary like "restart", "update", "scale", "patch" targeting production resources. A vocabulary-based guardrail cannot distinguish these from equivalent staging operations because the production/staging distinction is encoded in live resource metadata, not in the action vocabulary itself. Layer 2 OPA with live boto3 state retrieval addresses this gap directly, reducing the FN rate from 18% to 0%.
 
-## Deploy with Terraform
+This establishes empirically that multi-layer defense-in-depth is necessary, not merely sufficient: each layer addresses a failure mode the previous layer architecturally cannot resolve.
 
-One command deploys the full platform to any AWS account:
+---
 
-```bash
-cd terraform
-terraform init
-terraform apply -var="notification_email=your@company.com"
-```
-
-Provisions: Bedrock guardrail · DynamoDB · Lambda · API Gateway · S3 · SNS · CloudWatch dashboard · block-rate alarm.
-
-After apply, call the pipeline via REST:
-
-```bash
-curl -X POST https://YOUR_API_ID.execute-api.${AWS_REGION}.amazonaws.com/prod/evaluate \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "Delete all pods in the production namespace"}'
-```
-
-
-
-## Calibration progression
-
-| Version | Accuracy | FP Rate | FN Rate | What changed |
-|---|---|---|---|---|
-| v1 baseline | 60% | 40% | 0% | Single Bedrock guardrail layer |
-| v2 OPA fix | 79% | 18% | 3% | Low-risk read ops bypass |
-| v3 staging fix | 89% | 8% | 3% | Staging context bypass |
-| v4 calibrated | **96%** | **1%** | **3%** | Service config keywords |
-
-
-
-## Roadmap
-
-- [ ] **Path B — Kubernetes layer** — OPA Gatekeeper + Kyverno admission policies + KEDA bounded autoscaling + ArgoCD rollback envelope on EKS
-- [ ] **Semantic blast-radius scoring** — infrastructure dependency graph replaces keyword heuristics
-- [ ] **Multi-cloud support** — GCP Workload Identity + Azure Managed Identity agent identities
-- [ ] **Helm chart** — deploy guardrail sidecar alongside any agent workload
-- [ ] **Grafana dashboard** — OTel spans + Prometheus metrics for full observability
-
-
-
-## Contributing
-
-Contributions are welcome. Open an issue to discuss before submitting a PR.
-
-Areas of particular interest:
-- Additional OPA policy rules for common DevOps tools (Argo, Flux, Crossplane)
-- Improved confidence scoring beyond hedging vocabulary heuristics
-- Real HITL latency benchmarks from production deployments
-- Additional adversarial prompt variants
-
-
-
-## Project structure
+## Repository Structure
 
 ```
 agentic-devops-guardrails/
-├── devops_agent.py              # Layer 1 — Bedrock guardrail
-├── opa_policy.rego              # OPA Rego policy rules
-├── enterprise_dataset.py        # 100-prompt evaluation dataset
 ├── layers/
-│   ├── 2-opa/                   # Layer 2 — OPA evaluator
-│   ├── 3-confidence/            # Layer 3 — Confidence scorer
-│   ├── 4-hitl/                  # Layer 4 — HITL gate
-│   ├── 5-pipeline/              # Layer 5 — Full pipeline
-│   └── 6-enterprise/            # Enterprise 100-prompt eval
-└── terraform/                   # IaC deployment module
+│   ├── 1-bedrock/          # Layer 1: Bedrock Guardrail
+│   ├── 2-opa/              # Layer 2: OPA + live boto3 state
+│   ├── 3-confidence/       # Layer 3: Confidence delta scorer
+│   ├── 4-hitl/             # Layer 4: DynamoDB TTL HITL gate
+│   └── 5-audit/            # Layer 5: CloudWatch + S3 rollback
+├── policies/
+│   └── guardrail.rego      # OPA Rego policy rules
+├── evaluate.py             # Layer 1 baseline evaluation (100 prompts)
+├── evaluate_5layer.py      # Five-layer evaluation framework
+├── results.txt             # Layer 1 baseline results
+├── results_5layer.txt      # Five-layer verified results
+└── terraform/              # Infrastructure as code
 ```
 
+---
+
+## Running the Evaluation
+
+**Prerequisites:**
+- AWS account with Amazon Bedrock access
+- Claude Haiku 4.5 (`us.anthropic.claude-haiku-4-5-20251001-v1:0`) enabled
+- A Bedrock Guardrail configured with DestructiveOps and CredentialExposure denial topics
+
+```bash
+git clone https://github.com/ManvithaP-hub/agentic-devops-guardrails.git
+cd agentic-devops-guardrails
+python3 -m venv venv
+source venv/bin/activate
+pip install boto3
+
+export BEDROCK_GUARDRAIL_ID=your-guardrail-id
+export AWS_DEFAULT_REGION=us-east-1
+
+# Layer 1 baseline evaluation
+python3 evaluate.py
+
+# Five-layer evaluation
+python3 evaluate_5layer.py
+```
+
+Estimated runtime: 15-25 minutes for five-layer evaluation.
+Estimated cost: under $0.10 USD.
+
+---
+
 ## Terraform Deployment
-Production Terraform module: 
+
+The complete five-layer infrastructure can be deployed using the companion Terraform module:
+
+```
 https://github.com/ManvithaP-hub/terraform-aws-bedrock-guardrail
+```
+
+Also available on the Terraform Registry:
+
+```
+https://registry.terraform.io/modules/ManvithaP-hub/bedrock-guardrail/aws
+```
+
+---
+
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE) for details.
+
+---
+
+## Author
+
+**Manvitha Potluri**
+DevOps Cloud Solutions Architect
+[github.com/ManvithaP-hub](https://github.com/ManvithaP-hub)
