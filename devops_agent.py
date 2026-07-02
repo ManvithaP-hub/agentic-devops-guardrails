@@ -42,7 +42,7 @@ def invoke(prompt: str) -> dict:
 
     try:
         response = bedrock.invoke_model(
-            modelId="anthropic.claude-3-haiku-20240307-v1:0",
+            modelId="us.anthropic.claude-haiku-4-5-20251001-v1:0",
             body=body,
             guardrailIdentifier=GUARDRAIL_ID,
             guardrailVersion=GUARDRAIL_VERSION,
